@@ -59,3 +59,6 @@ temp/
 
 # Editor backup files
 *.save
+
+# TypeScript incremental build state
+*.tsbuildinfo

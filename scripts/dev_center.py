@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -244,7 +245,7 @@ def ship(message: str, auto_merge: bool = False) -> str:
 
     ensure_gh()
     code, out = run(
-        ["gh", "pr", "list", "--head", branch, "--base", "dev", "--state", "open", "--json", "number,url", "--jq", '.[0] | "\\(.number) \\(.url)"'],
+        ["gh", "pr", "list", "--head", branch, "--base", "dev", "--state", "open", "--json", "number,url", "--jq", '.[0] // empty | "\\(.number) \\(.url)"'],
         timeout=60,
     )
     if code != 0:
@@ -272,6 +273,25 @@ def ship(message: str, auto_merge: bool = False) -> str:
 
     if auto_merge:
         logs.append("\n=== Waiting for GitHub CI ===")
+
+        # A newly-created PR may exist for a few seconds before GitHub Actions
+        # attaches its checks. Treat "no checks reported" as a transient state.
+        checks_registered = False
+        for attempt in range(1, 61):
+            code, probe = run(["gh", "pr", "checks", pr_number], timeout=60)
+            normalized = (probe or "").lower()
+            if "no checks reported" not in normalized:
+                checks_registered = True
+                logs.append(f"CI checks registered after {attempt} probe(s).")
+                break
+            time.sleep(2)
+
+        if not checks_registered:
+            raise RuntimeError(
+                "GitHub CI checks did not appear within 120 seconds. "
+                "PR was NOT merged.\n\n" + "\n".join(logs)
+            )
+
         code, out = run(["gh", "pr", "checks", pr_number, "--watch", "--fail-fast"], timeout=1800)
         logs.append(out)
         if code != 0:
