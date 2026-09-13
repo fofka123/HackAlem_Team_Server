@@ -10,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import threading
+import time
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -114,16 +115,39 @@ def start_task(name: str) -> str:
 
 
 def test_all() -> tuple[bool, str]:
+    uid = str(os.getuid())
+    gid = str(os.getgid())
+
     steps = [
         ("Compose validation", COMPOSE + ["config", "-q"], 120),
         ("Build backend + frontend", COMPOSE + ["build", "backend", "frontend"], 1800),
         (
             "Backend Ruff + Pytest",
-            COMPOSE + ["run", "--rm", "--no-deps", "backend", "sh", "-lc", "ruff check app tests && pytest -q"],
+            COMPOSE
+            + [
+                "run",
+                "--rm",
+                "--no-deps",
+                "--user",
+                f"{uid}:{gid}",
+                "-e",
+                "RUFF_CACHE_DIR=/tmp/ruff_cache",
+                "-e",
+                "PYTHONPATH=/app",
+                "backend",
+                "sh",
+                "-lc",
+                "ruff check app tests && python -m pytest -q -o cache_dir=/tmp/pytest_cache",
+            ],
             1200,
         ),
-        ("Frontend production build", COMPOSE + ["run", "--rm", "--no-deps", "frontend", "npm", "run", "build"], 1200),
+        (
+            "Frontend production build",
+            COMPOSE + ["run", "--rm", "--no-deps", "frontend", "npm", "run", "build"],
+            1200,
+        ),
     ]
+
     logs: list[str] = []
     for title, cmd, timeout in steps:
         logs.append(f"=== {title} ===")
@@ -134,15 +158,16 @@ def test_all() -> tuple[bool, str]:
             return False, "\n".join(logs)
         logs.append("PASS\n")
 
-    # Runtime checks are useful when the stack is already up, but do not make a stopped stack fail local tests.
+    # Runtime checks help when the shared stack is already running, but a stopped
+    # stack does not make the source-code test suite fail.
     for url in ("http://127.0.0.1:8080/healthz", "http://127.0.0.1:8080/api/ready"):
         try:
             with urllib.request.urlopen(url, timeout=3) as response:
                 logs.append(f"Runtime {url}: HTTP {response.status}")
         except Exception:
             logs.append(f"Runtime {url}: skipped (shared/local stack is not reachable)")
-    return True, "\n".join(logs)
 
+    return True, "\n".join(logs)
 
 def staged_files() -> list[str]:
     code, out = git("diff", "--cached", "--name-only")
@@ -220,7 +245,7 @@ def ship(message: str, auto_merge: bool = False) -> str:
 
     ensure_gh()
     code, out = run(
-        ["gh", "pr", "list", "--head", branch, "--base", "dev", "--state", "open", "--json", "number,url", "--jq", '.[0] | "\\(.number) \\(.url)"'],
+        ["gh", "pr", "list", "--head", branch, "--base", "dev", "--state", "open", "--json", "number,url", "--jq", '.[0] // empty | "\\(.number) \\(.url)"'],
         timeout=60,
     )
     if code != 0:
@@ -248,6 +273,25 @@ def ship(message: str, auto_merge: bool = False) -> str:
 
     if auto_merge:
         logs.append("\n=== Waiting for GitHub CI ===")
+
+        # A newly-created PR may exist for a few seconds before GitHub Actions
+        # attaches its checks. Treat "no checks reported" as a transient state.
+        checks_registered = False
+        for attempt in range(1, 61):
+            code, probe = run(["gh", "pr", "checks", pr_number], timeout=60)
+            normalized = (probe or "").lower()
+            if "no checks reported" not in normalized:
+                checks_registered = True
+                logs.append(f"CI checks registered after {attempt} probe(s).")
+                break
+            time.sleep(2)
+
+        if not checks_registered:
+            raise RuntimeError(
+                "GitHub CI checks did not appear within 120 seconds. "
+                "PR was NOT merged.\n\n" + "\n".join(logs)
+            )
+
         code, out = run(["gh", "pr", "checks", pr_number, "--watch", "--fail-fast"], timeout=1800)
         logs.append(out)
         if code != 0:
@@ -257,6 +301,23 @@ def ship(message: str, auto_merge: bool = False) -> str:
         if code != 0:
             raise RuntimeError("CI passed, but automatic merge failed. Merge the PR manually.\n\n" + "\n".join(logs))
         logs.append("AUTO MERGE COMPLETE: PR merged into dev.")
+
+        # Return the local workspace to the shared dev branch automatically.
+        code, out = git("switch", "dev", timeout=120)
+        logs.append(f"$ git switch dev\n{out}")
+        if code != 0:
+            raise RuntimeError("PR was merged, but switching back to dev failed.\n\n" + "\n".join(logs))
+
+        code, out = git("pull", "--ff-only", "origin", "dev", timeout=300)
+        logs.append(f"$ git pull --ff-only origin dev\n{out}")
+        if code != 0:
+            raise RuntimeError("PR was merged, but updating local dev failed.\n\n" + "\n".join(logs))
+
+        # The remote feature branch was deleted by gh; remove stale refs and the
+        # now-merged local feature branch so the next task starts cleanly.
+        git("fetch", "--prune", "origin", timeout=180)
+        git("branch", "-D", branch, timeout=120)
+        logs.append("LOCAL WORKSPACE READY: switched to updated dev and cleaned the merged feature branch.")
     else:
         logs.append("SHIP COMPLETE: pushed and PR is ready for review/CI.")
 
