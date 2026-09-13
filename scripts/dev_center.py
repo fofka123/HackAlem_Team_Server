@@ -114,16 +114,39 @@ def start_task(name: str) -> str:
 
 
 def test_all() -> tuple[bool, str]:
+    uid = str(os.getuid())
+    gid = str(os.getgid())
+
     steps = [
         ("Compose validation", COMPOSE + ["config", "-q"], 120),
         ("Build backend + frontend", COMPOSE + ["build", "backend", "frontend"], 1800),
         (
             "Backend Ruff + Pytest",
-            COMPOSE + ["run", "--rm", "--no-deps", "backend", "sh", "-lc", "ruff check app tests && pytest -q"],
+            COMPOSE
+            + [
+                "run",
+                "--rm",
+                "--no-deps",
+                "--user",
+                f"{uid}:{gid}",
+                "-e",
+                "RUFF_CACHE_DIR=/tmp/ruff_cache",
+                "-e",
+                "PYTHONPATH=/app",
+                "backend",
+                "sh",
+                "-lc",
+                "ruff check app tests && python -m pytest -q -o cache_dir=/tmp/pytest_cache",
+            ],
             1200,
         ),
-        ("Frontend production build", COMPOSE + ["run", "--rm", "--no-deps", "frontend", "npm", "run", "build"], 1200),
+        (
+            "Frontend production build",
+            COMPOSE + ["run", "--rm", "--no-deps", "frontend", "npm", "run", "build"],
+            1200,
+        ),
     ]
+
     logs: list[str] = []
     for title, cmd, timeout in steps:
         logs.append(f"=== {title} ===")
@@ -134,15 +157,16 @@ def test_all() -> tuple[bool, str]:
             return False, "\n".join(logs)
         logs.append("PASS\n")
 
-    # Runtime checks are useful when the stack is already up, but do not make a stopped stack fail local tests.
+    # Runtime checks help when the shared stack is already running, but a stopped
+    # stack does not make the source-code test suite fail.
     for url in ("http://127.0.0.1:8080/healthz", "http://127.0.0.1:8080/api/ready"):
         try:
             with urllib.request.urlopen(url, timeout=3) as response:
                 logs.append(f"Runtime {url}: HTTP {response.status}")
         except Exception:
             logs.append(f"Runtime {url}: skipped (shared/local stack is not reachable)")
-    return True, "\n".join(logs)
 
+    return True, "\n".join(logs)
 
 def staged_files() -> list[str]:
     code, out = git("diff", "--cached", "--name-only")
@@ -257,6 +281,23 @@ def ship(message: str, auto_merge: bool = False) -> str:
         if code != 0:
             raise RuntimeError("CI passed, but automatic merge failed. Merge the PR manually.\n\n" + "\n".join(logs))
         logs.append("AUTO MERGE COMPLETE: PR merged into dev.")
+
+        # Return the local workspace to the shared dev branch automatically.
+        code, out = git("switch", "dev", timeout=120)
+        logs.append(f"$ git switch dev\n{out}")
+        if code != 0:
+            raise RuntimeError("PR was merged, but switching back to dev failed.\n\n" + "\n".join(logs))
+
+        code, out = git("pull", "--ff-only", "origin", "dev", timeout=300)
+        logs.append(f"$ git pull --ff-only origin dev\n{out}")
+        if code != 0:
+            raise RuntimeError("PR was merged, but updating local dev failed.\n\n" + "\n".join(logs))
+
+        # The remote feature branch was deleted by gh; remove stale refs and the
+        # now-merged local feature branch so the next task starts cleanly.
+        git("fetch", "--prune", "origin", timeout=180)
+        git("branch", "-D", branch, timeout=120)
+        logs.append("LOCAL WORKSPACE READY: switched to updated dev and cleaned the merged feature branch.")
     else:
         logs.append("SHIP COMPLETE: pushed and PR is ready for review/CI.")
 

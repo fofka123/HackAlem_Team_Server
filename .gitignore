@@ -56,3 +56,6 @@ backups/
 tmp/
 temp/
 .cache/
+
+# Editor backup files
+*.save
