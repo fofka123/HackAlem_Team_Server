@@ -19,6 +19,9 @@ services:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:5173/"]
 
   backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
     volumes:
       - ./backend:/app
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
