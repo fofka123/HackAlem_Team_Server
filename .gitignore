@@ -1,0 +1,55 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / Vite
+node_modules/
+frontend/node_modules/
+frontend/dist/
+dist/
+.vite/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Local AI models
+models/
+ai/models/
+*.gguf
+*.safetensors
+*.bin
+
+# Databases / runtime data
+data/
+postgres-data/
+redis-data/
+
+# Backups
+backups/
+*.tar
+*.tar.gz
+*.zip
+
+# Temporary
+tmp/
+temp/
+.cache/
