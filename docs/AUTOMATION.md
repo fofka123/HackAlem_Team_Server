@@ -33,3 +33,5 @@ For CachyOS/Arch the installer creates a systemd user service and desktop shortc
 5. Enter a commit message and press **Ship → PR** or **Ship + auto merge**.
 
 No routine Git/Docker commands are required after installation.
+
+Autodeploy smoke test: 2026-09-14.
