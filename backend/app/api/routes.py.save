@@ -1,15 +1,12 @@
 from __future__ import annotations
-
 import asyncio
 from datetime import datetime, timezone
-
 from fastapi import APIRouter
 from redis.asyncio import Redis
 from redis.exceptions import RedisError
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from app.core.config import settings
 
 router = APIRouter(prefix="/api")
@@ -27,12 +24,31 @@ async def ready() -> dict:
         async with engine.connect() as conn:
             await asyncio.wait_for(conn.execute(text("SELECT 1")), timeout=2.5)
         db_ok = True
+     except (TimeoutError, SQLAlchemyError):
+    	db_ok = False
+
+    redis = Redis.from_url(settings.redis_url, decode_responses=True)
+    try:
+        redis_ok = bool(await asyncio.wait_for(redis.ping(), timeout=2.5))
+    except Exception:
+        pasexcept (TimeoutError, RedisError):
+    redis_ok = Falses
+    finally:
+        await redis.aclose()    try:
+        async with engine.connect() as conn:
+            await asyncio.wait_for(
+                conn.execute(text("SELECT 1")),
+                timeout=2.5,
+            )
+        db_ok = True
     except (TimeoutError, SQLAlchemyError):
         db_ok = False
 
     redis = Redis.from_url(settings.redis_url, decode_responses=True)
     try:
-        redis_ok = bool(await asyncio.wait_for(redis.ping(), timeout=2.5))
+        redis_ok = bool(
+            await asyncio.wait_for(redis.ping(), timeout=2.5)
+        )
     except (TimeoutError, RedisError):
         redis_ok = False
     finally:

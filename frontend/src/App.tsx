@@ -9,16 +9,19 @@ import {
   ExternalLink,
   GitBranch,
   LayoutDashboard,
+  Laptop2,
   Network,
   RefreshCw,
+  Rocket,
   Server,
   ShieldCheck,
   TerminalSquare,
+  Workflow,
   Users,
 } from 'lucide-react'
 
 type ComponentState = 'ok' | 'error' | 'unknown'
-type Page = 'overview' | 'services' | 'deployments' | 'logs'
+type Page = 'overview' | 'services' | 'deployments' | 'automation' | 'logs'
 
 type ReadyResponse = {
   status: string
@@ -55,6 +58,11 @@ const pageMeta: Record<Page, { eyebrow: string; title: string; subtitle: string 
     eyebrow: 'DELIVERY WORKFLOW',
     title: 'Deployments',
     subtitle: 'A simple dev → main workflow keeps the demo version stable.',
+  },
+  automation: {
+    eyebrow: 'ONE-CLICK WORKFLOW',
+    title: 'Automation',
+    subtitle: 'Test, commit, push and create a pull request without typing the Git routine by hand.',
   },
   logs: {
     eyebrow: 'RUNTIME VISIBILITY',
@@ -315,6 +323,67 @@ export default function App() {
     </>
   )
 
+  const automation = (
+    <>
+      <section className="automation-hero">
+        <div>
+          <span className="environment-badge">LOCAL TOOL</span>
+          <h2>HackAlem Developer Center</h2>
+          <p>
+            Runs on each developer's own computer. It can see that developer's local files,
+            run Docker checks, create a feature branch, commit, push and open a PR to dev.
+          </p>
+        </div>
+        <button
+          className="primary-button"
+          type="button"
+          onClick={() => window.open('http://127.0.0.1:8766', '_blank', 'noopener,noreferrer')}
+        >
+          <Laptop2 size={17} /> Open Developer Center
+        </button>
+      </section>
+
+      <section className="automation-grid">
+        <article className="automation-card">
+          <div className="automation-card__icon"><Workflow size={20} /></div>
+          <h3>1. Start task</h3>
+          <p>Syncs dev and creates a clean feature/* branch for the new task.</p>
+          <code>dev → feature/task-name</code>
+        </article>
+        <article className="automation-card">
+          <div className="automation-card__icon"><CheckCircle2 size={20} /></div>
+          <h3>2. Test</h3>
+          <p>Validates Compose, builds the services, runs backend tests and the frontend production build.</p>
+          <code>Docker + Ruff + Pytest + Vite</code>
+        </article>
+        <article className="automation-card">
+          <div className="automation-card__icon"><Rocket size={20} /></div>
+          <h3>3. Ship</h3>
+          <p>Stages changes, commits, pushes and creates a pull request into dev.</p>
+          <code>feature/* → PR → dev</code>
+        </article>
+      </section>
+
+      <section className="section split">
+        <article className="panel">
+          <div className="panel__title"><ShieldCheck size={19} /><div><h2>Safe by default</h2><p>The helper only listens on localhost.</p></div></div>
+          <ul className="clean-list">
+            <li><CheckCircle2 size={16} /> No Docker socket is exposed through Team Console.</li>
+            <li><CheckCircle2 size={16} /> Shipping from main/dev is blocked.</li>
+            <li><CheckCircle2 size={16} /> .env, model weights and oversized secrets are blocked from commits.</li>
+          </ul>
+        </article>
+        <article className="panel">
+          <div className="panel__title"><GitBranch size={19} /><div><h2>GitHub CI</h2><p>GitHub performs the independent check after push.</p></div></div>
+          <div className="action-row">
+            <OpenButton href="https://github.com/fofka123/HackAlem_Team_Server/actions">Open Actions</OpenButton>
+            <OpenButton href="https://github.com/fofka123/HackAlem_Team_Server/pulls">Open Pull Requests</OpenButton>
+          </div>
+        </article>
+      </section>
+    </>
+  )
+
   const logs = (
     <section className="section split">
       <article className="panel">
@@ -359,6 +428,7 @@ export default function App() {
           {navItem('overview', <LayoutDashboard size={18} />, 'Overview')}
           {navItem('services', <Boxes size={18} />, 'Services')}
           {navItem('deployments', <GitBranch size={18} />, 'Deployments')}
+          {navItem('automation', <Rocket size={18} />, 'Automation')}
           {navItem('logs', <TerminalSquare size={18} />, 'Logs')}
         </nav>
 
@@ -388,6 +458,7 @@ export default function App() {
         {activePage === 'overview' && overview}
         {activePage === 'services' && services}
         {activePage === 'deployments' && deployments}
+        {activePage === 'automation' && automation}
         {activePage === 'logs' && logs}
       </main>
     </div>

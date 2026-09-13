@@ -1,0 +1,15 @@
+HackAlem Automation Pack v1
+
+Copy/overwrite this archive into the ROOT of HackAlem_Team_Server.
+It intentionally contains only changed/new files; it does NOT contain .env and will not overwrite your secrets.
+
+After extraction on CachyOS:
+  chmod +x scripts/*.sh scripts/dev_center.py
+  ./scripts/install-dev-center.sh
+  ./scripts/start-dev.sh
+
+Then open:
+  http://127.0.0.1:8766
+  http://127.0.0.1:8080  -> Automation
+
+The first dev build may take longer because backend/Dockerfile.dev installs Ruff and Pytest.
